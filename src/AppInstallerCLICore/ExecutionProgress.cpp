@@ -3,9 +3,9 @@
 #include "pch.h"
 #include "ExecutionProgress.h"
 
-
 namespace AppInstaller::CLI::Execution
 {
+    using namespace Settings;
     using namespace VirtualTerminal;
     using namespace std::string_view_literals;
 
@@ -19,7 +19,7 @@ namespace AppInstaller::CLI::Execution
 
         BytesFormatData s_bytesFormatData[] =
         {
-            // Multi-terabyate installers should be fairly rare for the foreseeable future...
+            // Multi-terabyte installers should be fairly rare for the foreseeable future...
             { 40, "TB"sv },
             { 30, "GB"sv },
             { 20, "MB"sv },
@@ -133,12 +133,14 @@ namespace AppInstaller::CLI::Execution
     {
         void ProgressVisualizerBase::ApplyStyle(size_t i, size_t max, bool enabled)
         {
+            if (!UseVT())
+            {
+                // Either no style set or VT disabled
+                return;
+            }
             switch (m_style)
             {
-            case AppInstaller::CLI::Execution::VisualStyle::NoVT:
-                // No VT means no style set
-                break;
-            case AppInstaller::CLI::Execution::VisualStyle::Plain:
+            case VisualStyle::Retro:
                 if (enabled)
                 {
                     m_out << TextFormat::Default;
@@ -148,10 +150,10 @@ namespace AppInstaller::CLI::Execution
                     m_out << TextFormat::Negative;
                 }
                 break;
-            case AppInstaller::CLI::Execution::VisualStyle::Accent:
+            case VisualStyle::Accent:
                 SetColor(m_out, TextFormat::Color::GetAccentColor(), enabled);
                 break;
-            case AppInstaller::CLI::Execution::VisualStyle::Rainbow:
+            case VisualStyle::Rainbow:
                 SetRainbowColor(m_out, i, max, enabled);
                 break;
             default:
@@ -165,7 +167,7 @@ namespace AppInstaller::CLI::Execution
         if (!m_spinnerJob.valid() && !m_spinnerRunning && !m_canceled)
         {
             m_spinnerRunning = true;
-            m_spinnerJob = std::async(std::launch::async, (UseVT() ? &IndefiniteSpinner::ShowSpinnerInternalWithVT : &IndefiniteSpinner::ShowSpinnerInternalNoVT), this);
+            m_spinnerJob = std::async(std::launch::async, &IndefiniteSpinner::ShowSpinnerInternal, this);
         }
     }
 
@@ -178,7 +180,7 @@ namespace AppInstaller::CLI::Execution
         }
     }
 
-    void IndefiniteSpinner::ShowSpinnerInternalNoVT()
+    void IndefiniteSpinner::ShowSpinnerInternal()
     {
         char spinnerChars[] = { '-', '\\', '|', '/' };
 
@@ -186,26 +188,35 @@ namespace AppInstaller::CLI::Execution
         // showing anything, or a progress task to skip straight to progress.
         Sleep(100);
 
-        // Indent two spaces for the spinner, but three here so that we can overwrite it in the loop.
-        m_out << "   ";
-
-        for (size_t i = 0; !m_canceled; ++i)
+        if (!m_canceled)
         {
-            constexpr size_t repetitionCount = 20;
-            ApplyStyle(i % repetitionCount, repetitionCount, true);
-            m_out << '\b' << spinnerChars[i % ARRAYSIZE(spinnerChars)] << std::flush;
-            Sleep(250);
+            if (UseVT())
+            {
+                // Additional VT-based progress reporting, for terminals that support it
+                m_out << Progress::Construct(Progress::State::Indeterminate);
+            }
+
+            // Indent two spaces for the spinner, but three here so that we can overwrite it in the loop.
+            m_out << "   ";
+
+            for (size_t i = 0; !m_canceled; ++i)
+            {
+                constexpr size_t repetitionCount = 20;
+                ApplyStyle(i % repetitionCount, repetitionCount, true);
+                m_out << '\b' << spinnerChars[i % ARRAYSIZE(spinnerChars)] << std::flush;
+                Sleep(250);
+            }
+
+            m_out << "\b \r";
+
+            if (UseVT())
+            {
+                m_out << Progress::Construct(Progress::State::None);
+            }
         }
 
-        m_out << "\b \r";
         m_canceled = false;
         m_spinnerRunning = false;
-    }
-
-    void IndefiniteSpinner::ShowSpinnerInternalWithVT()
-    {
-        // Nothing special to do at the moment, can use NoVT version.
-        ShowSpinnerInternalNoVT();
     }
 
     void ProgressBar::ShowProgress(uint64_t current, uint64_t maximum, ProgressType type)
@@ -240,6 +251,15 @@ namespace AppInstaller::CLI::Execution
             {
                 m_out << std::endl;
             }
+
+            if (UseVT())
+            {
+                // We always clear the VT-based progress bar, even if hideProgressWhenDone is false
+                // since it would be confusing for users if progress continues to be shown after winget exits
+                // (it is typically not automatically cleared by terminals on process exit)
+                m_out << Progress::Construct(Progress::State::None);
+            }
+
             m_isVisible = false;
         }
     }
@@ -347,6 +367,9 @@ namespace AppInstaller::CLI::Execution
                 m_out << static_cast<int>(percentage * 100) << '%';
                 break;
             }
+
+            // Additional VT-based progress reporting, for terminals that support it
+            m_out << Progress::Construct(Progress::State::Normal, static_cast<int>(percentage * 100));
         }
         else
         {

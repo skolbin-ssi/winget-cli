@@ -37,11 +37,14 @@ namespace AppInstaller::CLI::Execution
             Log,
             Override, //Override args are (and the only args) directly passed to installer
             InstallLocation,
+            InstallScope,
+            HashOverride, // Ignore hash mismatches
 
             //Source Command
             SourceName,
             SourceType,
             SourceArg,
+            ForceSourceReset,
 
             //Hash Command
             HashFile,
@@ -50,15 +53,32 @@ namespace AppInstaller::CLI::Execution
             //Validate Command
             ValidateManifest,
 
+            // Complete Command
+            Word,
+            CommandLine,
+            Position,
+
+            // Export Command
+            OutputFile,
+            IncludeVersions,
+
+            // Import Command
+            ImportFile,
+            IgnoreUnavailable,
+            IgnoreVersions,
+
             // Other
-            Force,      // Generic flag to enable a command to skip some check
+            All, // Used in Update command to update all installed packages to latest
             ListVersions, // Used in Show command to list all available versions of an app
             NoVT, // Disable VirtualTerminal outputs
-            PlainStyle, // Makes progress display as plain
+            RetroStyle, // Makes progress display as retro
             RainbowStyle, // Makes progress display as a rainbow
             Help, // Show command usage
             Info, // Show general info about WinGet
             VerboseLogs, // Increases winget logging level to verbose
+
+            // Used for demonstration purposes
+            ExperimentalArg,
         };
 
         bool Contains(Type arg) const { return (m_parsedArgs.count(arg) != 0); }
@@ -95,6 +115,21 @@ namespace AppInstaller::CLI::Execution
         void AddArg(Type arg, std::string value)
         {
             m_parsedArgs[arg].emplace_back(std::move(value));
+        }
+
+        void AddArg(Type arg, std::string_view value)
+        {
+            m_parsedArgs[arg].emplace_back(value);
+        }
+
+        bool Empty()
+        {
+            return m_parsedArgs.empty();
+        }
+
+        size_t GetArgsCount()
+        {
+            return m_parsedArgs.size();
         }
 
     private:

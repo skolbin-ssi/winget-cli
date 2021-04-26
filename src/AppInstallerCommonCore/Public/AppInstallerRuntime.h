@@ -23,26 +23,36 @@ namespace AppInstaller::Runtime
     // Gets a string representation of the OS version for debugging purposes.
     Utility::LocIndString GetOSVersion();
 
-    // Gets the path to the temp location.
-    std::filesystem::path GetPathToTemp();
+    // A path to be retrieved based on the runtime.
+    enum class PathName
+    {
+        // The temporary file location.
+        Temp,
+        // The local state (file) storage location.
+        LocalState,
+        // The default location where log files are located.
+        DefaultLogLocation,
+        // The default location, anonymized using environment variables.
+        DefaultLogLocationForDisplay,
+        // The location that standard type settings are stored.
+        // In a packaged context, this returns a prepend value for the container name.
+        StandardSettings,
+        // The location that user file type settings are stored.
+        UserFileSettings,
+        // The location where secure settings data is stored.
+        SecureSettings,
+    };
 
-    // Gets the path to the local state location.
-    std::filesystem::path GetPathToLocalState();
-
-    // Gets the path to the default log location.
-    std::filesystem::path GetPathToDefaultLogLocation();
-
-    // Gets a stream containing the named setting's value, if present.
-    // If the setting does not exist, returns an empty value.
-    std::unique_ptr<std::istream> GetSettingStream(std::filesystem::path name);
-
-    // Sets the named setting to the given value.
-    void SetSetting(std::filesystem::path name, std::string_view value);
-
-    // Deletes the given setting.
-    void RemoveSetting(std::filesystem::path name);
+    // Gets the path to the requested location.
+    std::filesystem::path GetPathTo(PathName path);
 
     // Determines whether the current OS version is >= the given one.
     // We treat the given Version struct as a standard 4 part Windows OS version.
     bool IsCurrentOSVersionGreaterThanOrEqual(const Utility::Version& version);
+
+    // Determines whether the process is running with administrator privileges.
+    bool IsRunningAsAdmin();
+
+    // Checks if the file system is NTFS
+    bool IsNTFS(const std::filesystem::path& filePath);
 }

@@ -46,8 +46,8 @@ namespace AppInstaller::Deployment
             {
                 AICLI_LOG(Core, Error, << "Deployment failed #" << id << ": " << Utility::ConvertToUTF8(deployResult.ErrorText()));
 
-                // Note that while the format string is char*, it gets converted to wchar before being used and thus %s needs a wchar.
-                THROW_HR_MSG(deployResult.ExtendedErrorCode(), "Install failed: %s", deployResult.ErrorText().c_str());
+                // Note that while the format string is char*, it gets converted to wchar before being used.
+                THROW_HR_MSG(deployResult.ExtendedErrorCode(), "Install failed: %ws", deployResult.ErrorText().c_str());
             }
             else
             {
@@ -56,24 +56,40 @@ namespace AppInstaller::Deployment
         }
     }
 
-    void RequestAddPackage(
+    void AddPackage(
         const winrt::Windows::Foundation::Uri& uri,
         winrt::Windows::Management::Deployment::DeploymentOptions options,
+        bool skipSmartScreen,
         IProgressCallback& callback)
     {
         size_t id = GetDeploymentOperationId();
-        AICLI_LOG(Core, Info, << "Starting RequestAddPackage operation #" << id << ": " << Utility::ConvertToUTF8(uri.AbsoluteUri().c_str()));
+        AICLI_LOG(Core, Info, << "Starting AddPackage operation #" << id << ": " << Utility::ConvertToUTF8(uri.AbsoluteUri().c_str()) << "SkipSmartScreen: " << skipSmartScreen);
 
         PackageManager packageManager;
 
-        // RequestAddPackageAsync will invoke smart screen.
-        auto deployOperation = packageManager.RequestAddPackageAsync(
-            uri,
-            nullptr, /*dependencyPackageUris*/
-            options,
-            nullptr, /*targetVolume*/
-            nullptr, /*optionalAndRelatedPackageFamilyNames*/
-            nullptr /*relatedPackageUris*/);
+        IAsyncOperationWithProgress<DeploymentResult, DeploymentProgress> deployOperation;
+
+        if (skipSmartScreen)
+        {
+            deployOperation = packageManager.AddPackageAsync(
+                uri,
+                nullptr, /*dependencyPackageUris*/
+                options,
+                nullptr, /*targetVolume*/
+                nullptr, /*optionalAndRelatedPackageFamilyNames*/
+                nullptr, /*optionalPackageUris*/
+                nullptr /*relatedPackageUris*/);
+        }
+        else
+        {
+            deployOperation = packageManager.RequestAddPackageAsync(
+                uri,
+                nullptr, /*dependencyPackageUris*/
+                options,
+                nullptr, /*targetVolume*/
+                nullptr, /*optionalAndRelatedPackageFamilyNames*/
+                nullptr /*relatedPackageUris*/);
+        }
 
         WaitForDeployment(deployOperation, id, callback);
     }

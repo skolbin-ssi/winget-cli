@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "SourceCommand.h"
+#include "Workflows/CompletionFlow.h"
 #include "Workflows/SourceFlow.h"
 #include "Workflows/WorkflowBase.h"
 #include "Resources.h"
@@ -21,6 +22,7 @@ namespace AppInstaller::CLI
             std::make_unique<SourceUpdateCommand>(FullName()),
             std::make_unique<SourceRemoveCommand>(FullName()),
             std::make_unique<SourceResetCommand>(FullName()),
+            std::make_unique<SourceExportCommand>(FullName()),
             });
     }
 
@@ -70,7 +72,10 @@ namespace AppInstaller::CLI
 
     void SourceAddCommand::ExecuteInternal(Context& context) const
     {
+        // Note: Group Policy for allowed sources is enforced at the RepositoryCore level
+        //       as we need to validate the source data and handle sources that were already added.
         context <<
+            Workflow::EnsureRunningAsAdmin <<
             Workflow::GetSourceList <<
             Workflow::CheckSourceListAgainstAdd <<
             Workflow::AddSource;
@@ -91,6 +96,15 @@ namespace AppInstaller::CLI
     Resource::LocString SourceListCommand::LongDescription() const
     {
         return { Resource::String::SourceListCommandLongDescription };
+    }
+
+    void SourceListCommand::Complete(Context& context, Args::Type valueType) const
+    {
+        if (valueType == Args::Type::SourceName)
+        {
+            context <<
+                Workflow::CompleteSourceName;
+        }
     }
 
     std::string SourceListCommand::HelpLink() const
@@ -122,6 +136,15 @@ namespace AppInstaller::CLI
         return { Resource::String::SourceUpdateCommandLongDescription };
     }
 
+    void SourceUpdateCommand::Complete(Context& context, Args::Type valueType) const
+    {
+        if (valueType == Args::Type::SourceName)
+        {
+            context <<
+                Workflow::CompleteSourceName;
+        }
+    }
+
     std::string SourceUpdateCommand::HelpLink() const
     {
         return std::string{ s_SourceCommand_HelpLink };
@@ -151,6 +174,15 @@ namespace AppInstaller::CLI
         return { Resource::String::SourceRemoveCommandLongDescription };
     }
 
+    void SourceRemoveCommand::Complete(Context& context, Args::Type valueType) const
+    {
+        if (valueType == Args::Type::SourceName)
+        {
+            context <<
+                Workflow::CompleteSourceName;
+        }
+    }
+
     std::string SourceRemoveCommand::HelpLink() const
     {
         return std::string{ s_SourceCommand_HelpLink };
@@ -158,7 +190,9 @@ namespace AppInstaller::CLI
 
     void SourceRemoveCommand::ExecuteInternal(Context& context) const
     {
+        // Note: Group Policy for unremovable sources is enforced at the RepositoryCore.
         context <<
+            Workflow::EnsureRunningAsAdmin <<
             Workflow::GetSourceListWithFilter <<
             Workflow::RemoveSources;
     }
@@ -167,7 +201,7 @@ namespace AppInstaller::CLI
     {
         return {
             Argument::ForType(Args::Type::SourceName),
-            Argument::ForType(Args::Type::Force),
+            Argument{ "force", Argument::NoAlias, Args::Type::ForceSourceReset, Resource::String::SourceResetForceArgumentDescription, ArgumentType::Flag },
         };
     }
 
@@ -181,6 +215,15 @@ namespace AppInstaller::CLI
         return { Resource::String::SourceResetCommandLongDescription };
     }
 
+    void SourceResetCommand::Complete(Context& context, Args::Type valueType) const
+    {
+        if (valueType == Args::Type::SourceName)
+        {
+            context <<
+                Workflow::CompleteSourceName;
+        }
+    }
+
     std::string SourceResetCommand::HelpLink() const
     {
         return std::string{ s_SourceCommand_HelpLink };
@@ -191,14 +234,54 @@ namespace AppInstaller::CLI
         if (context.Args.Contains(Args::Type::SourceName))
         {
             context <<
+                Workflow::EnsureRunningAsAdmin <<
                 Workflow::GetSourceListWithFilter <<
                 Workflow::ResetSourceList;
         }
         else
         {
             context <<
+                Workflow::EnsureRunningAsAdmin <<
                 Workflow::QueryUserForSourceReset <<
                 Workflow::ResetAllSources;
         }
+    }
+
+    std::vector<Argument> SourceExportCommand::GetArguments() const
+    {
+        return {
+            Argument::ForType(Args::Type::SourceName),
+        };
+    }
+
+    Resource::LocString SourceExportCommand::ShortDescription() const
+    {
+        return { Resource::String::SourceExportCommandShortDescription };
+    }
+
+    Resource::LocString SourceExportCommand::LongDescription() const
+    {
+        return { Resource::String::SourceExportCommandLongDescription };
+    }
+
+    void SourceExportCommand::Complete(Context& context, Args::Type valueType) const
+    {
+        if (valueType == Args::Type::SourceName)
+        {
+            context <<
+                Workflow::CompleteSourceName;
+        }
+    }
+
+    std::string SourceExportCommand::HelpLink() const
+    {
+        return std::string{ s_SourceCommand_HelpLink };
+    }
+
+    void SourceExportCommand::ExecuteInternal(Context& context) const
+    {
+        context <<
+            Workflow::GetSourceListWithFilter <<
+            Workflow::ExportSourceList;
     }
 }

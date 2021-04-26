@@ -5,7 +5,8 @@
 #include "Public/AppInstallerRuntime.h"
 #include "Public/AppInstallerStrings.h"
 
-#define AICLI_DEFAULT_TEMP_DIRECTORY "WinGet"
+#include <optional>
+
 #define WINGET_DEFAULT_LOG_DIRECTORY "DiagOutputDir"
 
 namespace AppInstaller::Runtime
@@ -15,8 +16,15 @@ namespace AppInstaller::Runtime
     namespace
     {
         using namespace std::string_view_literals;
-        constexpr std::string_view s_AppDataDir_Settings = "Settings";
-        constexpr std::string_view s_AppDataDir_State = "State";
+        constexpr std::string_view s_DefaultTempDirectory = "WinGet"sv;
+        constexpr std::string_view s_AppDataDir_Settings = "Settings"sv;
+        constexpr std::string_view s_AppDataDir_State = "State"sv;
+        constexpr std::string_view s_SecureSettings_Base = "Microsoft/WinGet"sv;
+        constexpr std::string_view s_SecureSettings_UserRelative = "settings"sv;
+        constexpr std::string_view s_SecureSettings_Relative_Unpackaged = "win"sv;
+#ifndef WINGET_DISABLE_FOR_FUZZING
+        constexpr std::string_view s_SecureSettings_Relative_Packaged = "pkg"sv;
+#endif
 
         // Gets a boolean indicating whether the current process has identity.
         bool DoesCurrentProcessHaveIdentity()
@@ -70,42 +78,14 @@ namespace AppInstaller::Runtime
         }
 
 #ifndef AICLI_DISABLE_TEST_HOOKS
-        static std::filesystem::path s_Settings_TestHook_ForcedContainerPrepend;
+        static std::map<PathName, std::filesystem::path> s_Path_TestHook_Overrides;
 #endif
 
-        void ValidateSettingNamePath(std::filesystem::path& name)
+        std::filesystem::path GetKnownFolderPath(const KNOWNFOLDERID& id)
         {
-            THROW_HR_IF(E_INVALIDARG, !name.has_relative_path());
-            THROW_HR_IF(E_INVALIDARG, name.has_root_path());
-            THROW_HR_IF(E_INVALIDARG, !name.has_filename());
-        }
-
-        // Gets the container within LocalSettings for the given path.
-        auto GetLocalSettingsContainerForPath(const std::filesystem::path& name)
-        {
-            auto result = winrt::Windows::Storage::ApplicationData::Current().LocalSettings();
-
-            std::filesystem::path pathToUse;
-
-#ifndef AICLI_DISABLE_TEST_HOOKS
-            if (!s_Settings_TestHook_ForcedContainerPrepend.empty())
-            {
-                pathToUse = s_Settings_TestHook_ForcedContainerPrepend;
-                pathToUse /= name;
-            }
-            else
-#endif
-            {
-                pathToUse = name;
-            }
-
-            for (const auto& part : pathToUse.parent_path())
-            {
-                auto partHstring = winrt::to_hstring(part.c_str());
-                result = result.CreateContainer(partHstring, winrt::Windows::Storage::ApplicationDataCreateDisposition::Always);
-            }
-
-            return result;
+            wil::unique_cotaskmem_string knownFolder = nullptr;
+            THROW_IF_FAILED(SHGetKnownFolderPath(id, KF_FLAG_NO_ALIAS | KF_FLAG_DONT_VERIFY | KF_FLAG_NO_PACKAGE_REDIRECTION, NULL, &knownFolder));
+            return knownFolder.get();
         }
 
         // Gets the path to the appdata root.
@@ -114,24 +94,8 @@ namespace AppInstaller::Runtime
         {
             THROW_HR_IF(E_NOT_VALID_STATE, IsRunningInPackagedContext());
 
-            DWORD charCount = ExpandEnvironmentStringsW(L"%LOCALAPPDATA%", nullptr, 0);
-            THROW_LAST_ERROR_IF(charCount == 0);
-
-            std::wstring localAppDataPath(charCount + 1, L'\0');
-            charCount = ExpandEnvironmentStringsW(L"%LOCALAPPDATA%", &localAppDataPath[0], charCount + 1);
-            THROW_LAST_ERROR_IF(charCount == 0);
-
-            localAppDataPath.resize(charCount - 1);
-
-            std::filesystem::path result = localAppDataPath;
+            std::filesystem::path result = GetKnownFolderPath(FOLDERID_LocalAppData);
             result /= "Microsoft/WinGet";
-
-#ifndef AICLI_DISABLE_TEST_HOOKS
-            if (!s_Settings_TestHook_ForcedContainerPrepend.empty())
-            {
-                result /= s_Settings_TestHook_ForcedContainerPrepend;
-            }
-#endif
 
             return result;
         }
@@ -147,33 +111,17 @@ namespace AppInstaller::Runtime
             std::filesystem::path result = GetPathToAppDataRoot();
             result /= relative;
 
-            if (std::filesystem::exists(result))
-            {
-                if (!std::filesystem::is_directory(result))
-                {
-                    // STATUS_NOT_A_DIRECTORY: A requested opened file is not a directory.
-                    THROW_NTSTATUS_MSG(0xC0000103, "AppData location is not a directory");
-                }
-            }
-            else
-            {
-                std::filesystem::create_directories(result);
-            }
-
             return result;
         }
 
-        // Gets the path to the settings directory for the given setting.
-        // Creates the directory if it does not already exist.
-        std::filesystem::path GetPathToSettings(const std::filesystem::path& name)
+        // Gets the current user's SID for use in paths.
+        std::filesystem::path GetUserSID()
         {
-            std::filesystem::path result = GetPathToAppDataDir(s_AppDataDir_Settings);
-            if (name.has_parent_path())
-            {
-                result /= name.parent_path();
-                std::filesystem::create_directories(result);
-            }
-            return result;
+            auto userToken = wil::get_token_information<TOKEN_USER>();
+
+            wil::unique_hlocal_string sidString;
+            THROW_IF_WIN32_BOOL_FALSE(ConvertSidToStringSidW(userToken->User.Sid, &sidString));
+            return { sidString.get() };
         }
     }
 
@@ -201,7 +149,7 @@ namespace AppInstaller::Runtime
                 // In the extremely unlikely event of a failure, this is merely a sentinel value
                 // to indicated such.  The only other option is to completely prevent execution,
                 // which seems unnecessary.
-                return LocIndString{ "error" };
+                return LocIndString{ "error"sv };
             }
 
             strstr << version->Build;
@@ -227,7 +175,7 @@ namespace AppInstaller::Runtime
                 // In the extremely unlikely event of a failure, this is merely a sentinel value
                 // to indicated such.  The only other option is to completely prevent execution,
                 // which seems unnecessary.
-                return LocIndString{ "error" };
+                return LocIndString{ "error"sv };
             }
 
             std::ostringstream strstr;
@@ -238,10 +186,11 @@ namespace AppInstaller::Runtime
         else
         {
             // Calling code should avoid calling in when this is the case.
-            return LocIndString{ "none" };
+            return LocIndString{ "none"sv };
         }
     }
 
+#ifndef WINGET_DISABLE_FOR_FUZZING
     LocIndString GetOSVersion()
     {
         winrt::Windows::System::Profile::AnalyticsInfo analyticsInfo{};
@@ -261,136 +210,146 @@ namespace AppInstaller::Runtime
 
         return LocIndString{ strstr.str() };
     }
-
-    std::filesystem::path GetPathToTemp()
-    {
-        std::filesystem::path result;
-
-        if (IsRunningInPackagedContext())
-        {
-            result.assign(winrt::Windows::Storage::ApplicationData::Current().TemporaryFolder().Path().c_str());
-        }
-        else
-        {
-            wchar_t tempPath[MAX_PATH + 1];
-            DWORD tempChars = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
-            result.assign(std::wstring_view{ tempPath, static_cast<size_t>(tempChars) });
-        }
-
-        result /= AICLI_DEFAULT_TEMP_DIRECTORY;
-
-        std::filesystem::create_directories(result);
-
-        return result;
-    }
-
-    std::filesystem::path GetPathToLocalState()
-    {
-        if (IsRunningInPackagedContext())
-        {
-            std::filesystem::path result = winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path().c_str();
-
-#ifndef AICLI_DISABLE_TEST_HOOKS
-            if (!s_Settings_TestHook_ForcedContainerPrepend.empty())
-            {
-                result /= s_Settings_TestHook_ForcedContainerPrepend;
-            }
 #endif
 
-            return result;
-        }
-        else
-        {
-            return GetPathToAppDataDir(s_AppDataDir_State);
-        }
-    }
-
-    std::filesystem::path GetPathToDefaultLogLocation()
+    std::filesystem::path GetPathTo(PathName path)
     {
+        std::filesystem::path result;
+        bool create = true;
+
+#ifndef WINGET_DISABLE_FOR_FUZZING
         if (IsRunningInPackagedContext())
         {
-            // To enable UIF collection through Feedback hub, we must put our logs here.
-            auto result = GetPathToLocalState() / WINGET_DEFAULT_LOG_DIRECTORY;
+            auto appStorage = winrt::Windows::Storage::ApplicationData::Current();
 
-            std::filesystem::create_directories(result);
-
-            return result;
-        }
-        else
-        {
-            return GetPathToTemp();
-        }
-    }
-
-    std::unique_ptr<std::istream> GetSettingStream(std::filesystem::path name)
-    {
-        ValidateSettingNamePath(name);
-
-        if (IsRunningInPackagedContext())
-        {
-            auto container = GetLocalSettingsContainerForPath(name);
-            auto filenameHstring = winrt::to_hstring(name.filename().c_str());
-            auto settingsValues = container.Values();
-            if (settingsValues.HasKey(filenameHstring))
+            switch (path)
             {
-                auto value = winrt::unbox_value<winrt::hstring>(settingsValues.Lookup(filenameHstring));
-                return std::make_unique<std::istringstream>(Utility::ConvertToUTF8(value.c_str()));
+            case PathName::Temp:
+                result.assign(appStorage.TemporaryFolder().Path().c_str());
+                result /= s_DefaultTempDirectory;
+                break;
+            case PathName::LocalState:
+            case PathName::UserFileSettings:
+                result.assign(appStorage.LocalFolder().Path().c_str());
+                break;
+            case PathName::DefaultLogLocation:
+            case PathName::DefaultLogLocationForDisplay:
+                // To enable UIF collection through Feedback hub, we must put our logs here.
+                result.assign(appStorage.LocalFolder().Path().c_str());
+                result /= WINGET_DEFAULT_LOG_DIRECTORY;
+
+                if (path == PathName::DefaultLogLocationForDisplay)
+                {
+                    std::filesystem::path localAppData = GetKnownFolderPath(FOLDERID_LocalAppData);
+
+                    auto ladItr = localAppData.begin();
+                    auto resultItr = result.begin();
+
+                    while (ladItr != localAppData.end() && resultItr != result.end())
+                    {
+                        if (*ladItr != *resultItr)
+                        {
+                            break;
+                        }
+
+                        ++ladItr;
+                        ++resultItr;
+                    }
+
+                    if (ladItr == localAppData.end())
+                    {
+                        localAppData.assign("%LOCALAPPDATA%");
+                        
+                        for (;resultItr != result.end(); ++resultItr)
+                        {
+                            localAppData /= *resultItr;
+                        }
+
+                        result = std::move(localAppData);
+                    }
+                }
+                break;
+            case PathName::StandardSettings:
+                create = false;
+                break;
+            case PathName::SecureSettings:
+                result = GetKnownFolderPath(FOLDERID_ProgramData);
+                result /= s_SecureSettings_Base;
+                result /= GetUserSID();
+                result /= s_SecureSettings_UserRelative;
+                result /= s_SecureSettings_Relative_Packaged;
+                result /= GetPackageName();
+                create = false;
+                break;
+            default:
+                THROW_HR(E_UNEXPECTED);
+            }
+        }
+        else
+#endif
+        {
+            switch (path)
+            {
+            case PathName::Temp:
+            case PathName::DefaultLogLocation:
+            {
+                wchar_t tempPath[MAX_PATH + 1];
+                DWORD tempChars = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
+                result.assign(std::wstring_view{ tempPath, static_cast<size_t>(tempChars) });
+
+                result /= s_DefaultTempDirectory;
+            }
+                break;
+            case PathName::DefaultLogLocationForDisplay:
+                result.assign("%TEMP%");
+                result /= s_DefaultTempDirectory;
+                break;
+            case PathName::LocalState:
+                result = GetPathToAppDataDir(s_AppDataDir_State);
+                break;
+            case PathName::StandardSettings:
+            case PathName::UserFileSettings:
+                result = GetPathToAppDataDir(s_AppDataDir_Settings);
+                break;
+            case PathName::SecureSettings:
+                result = GetKnownFolderPath(FOLDERID_ProgramData);
+                result /= s_SecureSettings_Base;
+                result /= GetUserSID();
+                result /= s_SecureSettings_UserRelative;
+                result /= s_SecureSettings_Relative_Unpackaged;
+                create = false;
+                break;
+            default:
+                THROW_HR(E_UNEXPECTED);
+            }
+        }
+
+#ifndef AICLI_DISABLE_TEST_HOOKS
+        // Override the value after letting the normal code path run
+        auto itr = s_Path_TestHook_Overrides.find(path);
+        if (itr != s_Path_TestHook_Overrides.end())
+        {
+            result = itr->second;
+        }
+#endif
+
+        if (create && result.is_absolute())
+        {
+            if (std::filesystem::exists(result))
+            {
+                if (!std::filesystem::is_directory(result))
+                {
+                    // STATUS_NOT_A_DIRECTORY: A requested opened file is not a directory.
+                    THROW_NTSTATUS_MSG(0xC0000103, "Location is not a directory");
+                }
             }
             else
             {
-                return {};
+                std::filesystem::create_directories(result);
             }
         }
-        else
-        {
-            auto settingFileName = GetPathToSettings(name);
-            settingFileName /= name.filename();
 
-            if (std::filesystem::exists(settingFileName))
-            {
-                return std::make_unique<std::ifstream>(settingFileName);
-            }
-            else
-            {
-                return {};
-            }
-        }
-    }
-
-    void SetSetting(std::filesystem::path name, std::string_view value)
-    {
-        ValidateSettingNamePath(name);
-
-        if (IsRunningInPackagedContext())
-        {
-            GetLocalSettingsContainerForPath(name).Values().
-                Insert(winrt::to_hstring(name.filename().c_str()), winrt::box_value(winrt::to_hstring(value)));
-        }
-        else
-        {
-            auto settingFileName = GetPathToSettings(name);
-            settingFileName /= name.filename();
-
-            std::ofstream stream(settingFileName, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
-            stream << value << std::flush;
-        }
-    }
-
-    void RemoveSetting(std::filesystem::path name)
-    {
-        ValidateSettingNamePath(name);
-
-        if (IsRunningInPackagedContext())
-        {
-            GetLocalSettingsContainerForPath(name).Values().Remove(winrt::to_hstring(name.filename().c_str()));
-        }
-        else
-        {
-            auto settingFileName = GetPathToSettings(name);
-            settingFileName /= name.filename();
-
-            std::filesystem::remove(settingFileName);
-        }
+        return result;
     }
 
     bool IsCurrentOSVersionGreaterThanOrEqual(const Utility::Version& version)
@@ -427,10 +386,47 @@ namespace AppInstaller::Runtime
         return !!result;
     }
 
-#ifndef AICLI_DISABLE_TEST_HOOKS
-    void TestHook_ForceContainerPrepend(const std::filesystem::path& prepend)
+    bool IsRunningAsAdmin()
     {
-        s_Settings_TestHook_ForcedContainerPrepend = prepend;
+        return wil::test_token_membership(nullptr, SECURITY_NT_AUTHORITY, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
+    }
+
+    bool IsNTFS(const std::filesystem::path& filePath)
+    {
+        wil::unique_hfile fileHandle{ CreateFileW(
+            filePath.c_str(), /*lpFileName*/
+            FILE_READ_ATTRIBUTES, /*dwDesiredAccess*/
+            0, /*dwShareMode*/
+            NULL, /*lpSecurityAttributes*/
+            OPEN_EXISTING, /*dwCreationDisposition*/
+            FILE_ATTRIBUTE_NORMAL, /*dwFlagsAndAttributes*/
+            NULL /*hTemplateFile*/) };
+
+        THROW_LAST_ERROR_IF(fileHandle.get() == INVALID_HANDLE_VALUE);
+
+        wchar_t fileSystemName[MAX_PATH];
+        THROW_LAST_ERROR_IF(!GetVolumeInformationByHandleW(
+            fileHandle.get(), /*hFile*/
+            NULL, /*lpVolumeNameBuffer*/
+            0, /*nVolumeNameSize*/
+            NULL, /*lpVolumeSerialNumber*/
+            NULL, /*lpMaximumComponentLength*/
+            NULL, /*lpFileSystemFlags*/
+            fileSystemName, /*lpFileSystemNameBuffer*/
+            MAX_PATH /*nFileSystemNameSize*/));
+
+        return _wcsicmp(fileSystemName, L"NTFS") == 0;
+    }
+
+#ifndef AICLI_DISABLE_TEST_HOOKS
+    void TestHook_SetPathOverride(PathName target, const std::filesystem::path& path)
+    {
+        s_Path_TestHook_Overrides[target] = path;
+    }
+
+    void TestHook_ClearPathOverrides()
+    {
+        s_Path_TestHook_Overrides.clear();
     }
 #endif
 }

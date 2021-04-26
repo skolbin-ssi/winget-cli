@@ -22,14 +22,29 @@
     <Filter Include="Microsoft\Schema\1_0">
       <UniqueIdentifier>{cff561cd-211b-4cab-87f5-39359eef1e8d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Manifest">
-      <UniqueIdentifier>{052eaac1-ec6e-4879-8388-aff5a30401f0}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Public">
       <UniqueIdentifier>{69ce2e35-fe7f-41af-bd47-91a70131d167}</UniqueIdentifier>
     </Filter>
     <Filter Include="ICU">
       <UniqueIdentifier>{dac1a359-45ac-4456-8a83-f7df10058197}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Microsoft\Schema\1_1">
+      <UniqueIdentifier>{aef8989c-44fd-4848-ae2c-c81d3f2e2c72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Microsoft\Schema\1_2">
+      <UniqueIdentifier>{dc8b6163-e9b5-4d05-87bc-d6098afe0f92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rest">
+      <UniqueIdentifier>{7f16f6e0-12c6-4bb9-885e-3f8b666d5f74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rest\Schema">
+      <UniqueIdentifier>{15a1ee83-4118-40fe-ba43-c54d7185d505}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rest\Schema\1_0">
+      <UniqueIdentifier>{8a93b62f-d065-4048-b43a-a2b14b70c330}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rest\Schema\1_0\Json">
+      <UniqueIdentifier>{6bcbaf7a-289f-4d0b-b128-67bef903745c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -53,15 +68,6 @@
     </ClInclude>
     <ClInclude Include="Microsoft\Schema\1_0\Interface.h">
       <Filter>Microsoft\Schema\1_0</Filter>
-    </ClInclude>
-    <ClInclude Include="Manifest\Manifest.h">
-      <Filter>Manifest</Filter>
-    </ClInclude>
-    <ClInclude Include="Manifest\ManifestInstaller.h">
-      <Filter>Manifest</Filter>
-    </ClInclude>
-    <ClInclude Include="Manifest\ManifestLocalization.h">
-      <Filter>Manifest</Filter>
     </ClInclude>
     <ClInclude Include="Microsoft\Schema\1_0\OneToOneTable.h">
       <Filter>Microsoft\Schema\1_0</Filter>
@@ -123,8 +129,83 @@
     <ClInclude Include="ICU\SQLiteICU.h">
       <Filter>ICU</Filter>
     </ClInclude>
-    <ClInclude Include="Manifest\ManifestValidation.h">
-      <Filter>Manifest</Filter>
+    <ClInclude Include="Microsoft\Schema\1_1\Interface.h">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_1\PackageFamilyNameTable.h">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_1\ProductCodeTable.h">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_1\SearchResultsTable.h">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\PredefinedInstalledSourceFactory.h">
+      <Filter>Microsoft</Filter>
+    </ClInclude>
+    <ClInclude Include="CompositeSource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_1\ManifestMetadataTable.h">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\ARPHelper.h">
+      <Filter>Microsoft</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_2\Interface.h">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_2\SearchResultsTable.h">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_2\NormalizedPackageNameTable.h">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_2\NormalizedPackagePublisherTable.h">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Interface.h">
+      <Filter>Rest\Schema\1_0</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\IRestClient.h">
+      <Filter>Rest\Schema</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\HttpClientHelper.h">
+      <Filter>Rest</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\RestClient.h">
+      <Filter>Rest</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\RestSource.h">
+      <Filter>Rest</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\RestSourceFactory.h">
+      <Filter>Rest</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\RestHelper.h">
+      <Filter>Rest\Schema</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Json\CommonJsonConstants.h">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Json\InformationResponseDeserializer.h">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Json\ManifestDeserializer.h">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Json\SearchRequestSerializer.h">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_0\Json\SearchResponseDeserializer.h">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\JsonHelper.h">
+      <Filter>Rest\Schema</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\CommonRestConstants.h">
+      <Filter>Rest\Schema</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -142,18 +223,6 @@
     </ClCompile>
     <ClCompile Include="Microsoft\Schema\Version.cpp">
       <Filter>Microsoft\Schema</Filter>
-    </ClCompile>
-    <ClCompile Include="Microsoft\Schema\1_0\Interface.cpp">
-      <Filter>Microsoft\Schema\1_0</Filter>
-    </ClCompile>
-    <ClCompile Include="Manifest\Manifest.cpp">
-      <Filter>Manifest</Filter>
-    </ClCompile>
-    <ClCompile Include="Manifest\ManifestInstaller.cpp">
-      <Filter>Manifest</Filter>
-    </ClCompile>
-    <ClCompile Include="Manifest\ManifestLocalization.cpp">
-      <Filter>Manifest</Filter>
     </ClCompile>
     <ClCompile Include="Microsoft\Schema\1_0\OneToOneTable.cpp">
       <Filter>Microsoft\Schema\1_0</Filter>
@@ -182,14 +251,71 @@
     <ClCompile Include="SQLiteTempTable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Microsoft\Schema\1_0\SearchResultsTable.cpp">
-      <Filter>Microsoft\Schema\1_0</Filter>
-    </ClCompile>
     <ClCompile Include="ICU\SQLiteICU.c">
       <Filter>ICU</Filter>
     </ClCompile>
-    <ClCompile Include="Manifest\ManifestValidation.cpp">
-      <Filter>Manifest</Filter>
+    <ClCompile Include="Microsoft\Schema\1_0\Interface_1_0.cpp">
+      <Filter>Microsoft\Schema\1_0</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_1\Interface_1_1.cpp">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_0\SearchResultsTable_1_0.cpp">
+      <Filter>Microsoft\Schema\1_0</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_1\SearchResultsTable_1_1.cpp">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\PredefinedInstalledSourceFactory.cpp">
+      <Filter>Microsoft</Filter>
+    </ClCompile>
+    <ClCompile Include="CompositeSource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_1\ManifestMetadataTable.cpp">
+      <Filter>Microsoft\Schema\1_1</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\ARPHelper.cpp">
+      <Filter>Microsoft</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_2\Interface_1_2.cpp">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_2\SearchResultsTable_1_2.cpp">
+      <Filter>Microsoft\Schema\1_2</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_0\Interface.cpp">
+      <Filter>Rest\Schema\1_0</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\HttpClientHelper.cpp">
+      <Filter>Rest</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\RestClient.cpp">
+      <Filter>Rest</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\RestSource.cpp">
+      <Filter>Rest</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\RestSourceFactory.cpp">
+      <Filter>Rest</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\RestHelper.cpp">
+      <Filter>Rest\Schema</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_0\Json\InformationResponseDeserializer.cpp">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_0\Json\ManifestDeserializer.cpp">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_0\Json\SearchRequestSerializer.cpp">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_0\Json\SearchResponseDeserializer.cpp">
+      <Filter>Rest\Schema\1_0\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\JsonHelper.cpp">
+      <Filter>Rest\Schema</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

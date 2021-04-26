@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 #pragma once
+#include "Command.h"
 #include "ExecutionContext.h"
 
 namespace AppInstaller::CLI::Workflow
@@ -64,4 +65,10 @@ namespace AppInstaller::CLI::Workflow
     // Inputs: None
     // Outputs: None
     void ResetAllSources(Execution::Context& context);
+
+    // Lists the sources in SourceList in a format appropriate for using in Group Policy
+    // Required Args: None
+    // Inputs: SourceList
+    // Outputs: None
+    void ExportSourceList(Execution::Context& context);
 }

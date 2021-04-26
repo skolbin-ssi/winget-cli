@@ -3,8 +3,9 @@
 #include "pch.h"
 #include "Public/AppInstallerMsixInfo.h"
 #include "HttpStream/HttpRandomAccessStream.h"
-#include "Public/AppInstallerStrings.h"
 #include "Public/AppInstallerDownloader.h"
+#include "Public/AppInstallerLogging.h"
+#include "Public/AppInstallerStrings.h"
 
 
 using namespace winrt::Windows::Storage::Streams;
@@ -199,6 +200,46 @@ namespace AppInstaller::Msix
         THROW_IF_FAILED(appxFactory->CreateManifestReader(inputStream, reader));
     }
 
+    std::optional<std::string> GetPackageFullNameFromFamilyName(std::string_view familyName)
+    {
+        std::wstring pfn = Utility::ConvertToUTF16(familyName);
+        UINT32 fullNameCount = 0;
+        UINT32 bufferLength = 0;
+        UINT32 properties = 0;
+
+        LONG findResult = FindPackagesByPackageFamily(pfn.c_str(), PACKAGE_FILTER_HEAD, &fullNameCount, nullptr, &bufferLength, nullptr, &properties);
+        if (findResult == ERROR_SUCCESS || fullNameCount == 0)
+        {
+            // No package found
+            return {};
+        }
+        else if (findResult != ERROR_INSUFFICIENT_BUFFER)
+        {
+            THROW_WIN32(findResult);
+        }
+        else if (fullNameCount != 1)
+        {
+            // Don't directly error, let caller deal with it
+            AICLI_LOG(Core, Error, << "Multiple packages found for family name: " << fullNameCount);
+            return {};
+        }
+
+        // fullNameCount == 1 at this point
+        PWSTR fullNamePtr;
+        std::wstring buffer(static_cast<size_t>(bufferLength) + 1, L'\0');
+
+        THROW_IF_WIN32_ERROR(FindPackagesByPackageFamily(pfn.c_str(), PACKAGE_FILTER_HEAD, &fullNameCount, &fullNamePtr, &bufferLength, &buffer[0], &properties));
+        if (fullNameCount != 1 || bufferLength == 0)
+        {
+            // Something changed in between, abandon
+            AICLI_LOG(Core, Error, << "Packages found for family name: " << fullNameCount);
+            return {};
+        }
+
+        buffer.resize(bufferLength - 1);
+        return Utility::ConvertToUTF8(buffer);
+    }
+
     std::string GetPackageFamilyNameFromFullName(std::string_view fullName)
     {
         std::wstring result;
@@ -252,7 +293,7 @@ namespace AppInstaller::Msix
         }
         else
         {
-            std::filesystem::path path(uriStr);
+            std::filesystem::path path(Utility::ConvertToUTF16(uriStr));
             THROW_IF_FAILED(SHCreateStreamOnFileEx(path.c_str(),
                 STGM_READ | STGM_SHARE_DENY_WRITE | STGM_FAILIFTHERE, 0, FALSE, nullptr, &m_stream));
         }

@@ -5,35 +5,67 @@
 #include "ExecutionContext.h"
 #include "Invocation.h"
 #include "Resources.h"
+#include <winget/UserSettings.h>
+#include <winget/ExperimentalFeature.h>
+#include <winget/GroupPolicy.h>
 
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <vector>
 
-
 namespace AppInstaller::CLI
 {
     struct CommandException
     {
-        // The message should be a localized string, but the parameters are currently not localized.
-        // We 'convert' the param to a localization independent view here.
-        CommandException(Resource::LocString message, std::string_view param) : m_message(std::move(message)), m_param(param) {}
+        CommandException(Resource::LocString message) : m_message(std::move(message)) {}
 
-        const Resource::LocString& Message() const { return m_message; }
-        const Utility::LocIndView Param() const { return m_param; }
+        // The message should be a localized string.
+        // The parameters can be either localized or not.
+        // We 'convert' the param to a localization independent view here if needed.
+        CommandException(Resource::LocString message, Resource::LocString param) : m_message(std::move(message)), m_params({ param }) {}
+        CommandException(Resource::LocString message, std::string_view param) : m_message(std::move(message)), m_params({ Utility::LocIndString{ param } }) {}
+
+        // The message should be a localized string, but the replacement and parameters are not.
+        // This supports replacing %1 in the message with the replace value.
+        CommandException(Resource::LocString message, Utility::LocIndView replace, std::vector<Utility::LocIndString>&& params) :
+            m_message(std::move(message)), m_replace(replace), m_params(std::move(params)) {}
+
+        const Utility::LocIndString Message() const;
+        const std::vector<Utility::LocIndString>& Params() const { return m_params; }
 
     private:
         Resource::LocString m_message;
-        Utility::LocIndView m_param;
+        std::optional<Utility::LocIndString> m_replace;
+        std::vector<Utility::LocIndString> m_params;
     };
 
     struct Command
     {
-        Command(std::string_view name, std::string_view parent);
+        // Controls the visibility of the field.
+        enum class Visibility
+        {
+            // Shown in help.
+            Show,
+            // Not shown in help.
+            Hidden,
+        };
+
+        Command(std::string_view name, std::string_view parent) :
+            Command(name, parent, Settings::ExperimentalFeature::Feature::None) {}
+        Command(std::string_view name, std::string_view parent, Command::Visibility visibility) :
+            Command(name, parent, visibility, Settings::ExperimentalFeature::Feature::None) {}
+        Command(std::string_view name, std::string_view parent, Settings::ExperimentalFeature::Feature feature) :
+            Command(name, parent, Command::Visibility::Show, feature) {}
+        Command(std::string_view name, std::string_view parent, Settings::TogglePolicy::Policy groupPolicy) :
+            Command(name, parent, Command::Visibility::Show, Settings::ExperimentalFeature::Feature::None, groupPolicy) {}
+        Command(std::string_view name, std::string_view parent, Command::Visibility visibility, Settings::ExperimentalFeature::Feature feature) :
+            Command(name, parent, visibility, feature, Settings::TogglePolicy::Policy::None) {}
+        Command(std::string_view name, std::string_view parent, Command::Visibility visibility, Settings::ExperimentalFeature::Feature feature, Settings::TogglePolicy::Policy groupPolicy);
         virtual ~Command() = default;
 
         Command(const Command&) = default;
@@ -47,9 +79,14 @@ namespace AppInstaller::CLI
 
         std::string_view Name() const { return m_name; }
         const std::string& FullName() const { return m_fullName; }
+        Command::Visibility GetVisibility() const;
+        Settings::ExperimentalFeature::Feature Feature() const { return m_feature; }
+        Settings::TogglePolicy::Policy GroupPolicy() const { return m_groupPolicy; }
 
         virtual std::vector<std::unique_ptr<Command>> GetCommands() const { return {}; }
         virtual std::vector<Argument> GetArguments() const { return {}; }
+        std::vector<std::unique_ptr<Command>> GetVisibleCommands() const;
+        std::vector<Argument> GetVisibleArguments() const;
 
         virtual Resource::LocString ShortDescription() const { return {}; }
         virtual Resource::LocString LongDescription() const { return {}; }
@@ -62,6 +99,9 @@ namespace AppInstaller::CLI
         virtual void ParseArguments(Invocation& inv, Execution::Args& execArgs) const;
         virtual void ValidateArguments(Execution::Args& execArgs) const;
 
+        virtual void Complete(Execution::Context& context) const;
+        virtual void Complete(Execution::Context& context, Execution::Args::Type valueType) const;
+
         virtual void Execute(Execution::Context& context) const;
 
     protected:
@@ -71,6 +111,9 @@ namespace AppInstaller::CLI
     private:
         std::string_view m_name;
         std::string m_fullName;
+        Command::Visibility m_visibility;
+        Settings::ExperimentalFeature::Feature m_feature;
+        Settings::TogglePolicy::Policy m_groupPolicy;
     };
 
     template <typename Container>
@@ -86,4 +129,6 @@ namespace AppInstaller::CLI
 
         return result;
     }
+
+    int Execute(Execution::Context& context, std::unique_ptr<Command>& command);
 }

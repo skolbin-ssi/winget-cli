@@ -18,45 +18,41 @@ namespace AppInstaller::CLI::VirtualTerminal
         }
     }
 
-    ConsoleModeRestore::ConsoleModeRestore(bool enableVTProcessing)
+    ConsoleModeRestore::ConsoleModeRestore()
     {
-        if (enableVTProcessing)
+        // Set output mode to handle virtual terminal sequences
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut == INVALID_HANDLE_VALUE)
         {
-            // Set output mode to handle virtual terminal sequences
-            HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-            if (hOut == INVALID_HANDLE_VALUE)
+            LOG_LAST_ERROR();
+        }
+        else if (hOut == NULL)
+        {
+            AICLI_LOG(CLI, Info, << "VT not enabled due to null output handle");
+        }
+        else
+        {
+            if (!GetConsoleMode(hOut, &m_previousMode))
             {
-                LOG_LAST_ERROR();
-            }
-            else if (hOut == NULL)
-            {
-                AICLI_LOG(CLI, Info, << "VT not enabled due to null output handle");
+                // If the user redirects output, the handle will be invalid for this function.
+                // Don't log it in that case.
+                LOG_LAST_ERROR_IF(GetLastError() != ERROR_INVALID_HANDLE);
             }
             else
             {
-                if (!GetConsoleMode(hOut, &m_previousMode))
+                // Try to degrade in case DISABLE_NEWLINE_AUTO_RETURN isn't supported.
+                for (DWORD mode : { ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN, ENABLE_VIRTUAL_TERMINAL_PROCESSING})
                 {
-                    // If the user redirects output, the handle will be invalid for this function.
-                    // Don't log it in that case.
-                    LOG_LAST_ERROR_IF(GetLastError() != ERROR_INVALID_HANDLE);
-                }
-                else
-                {
-                    // Try to degrade in case DISABLE_NEWLINE_AUTO_RETURN isn't supported.
-                    for (DWORD mode : { ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN, ENABLE_VIRTUAL_TERMINAL_PROCESSING})
+                    DWORD outMode = m_previousMode | mode;
+                    if (!SetConsoleMode(hOut, outMode))
                     {
-                        DWORD outMode = m_previousMode | mode;
-                        if (!SetConsoleMode(hOut, outMode))
-                        {
-                            // Even if it is a different error, log it and try to carry on.
-                            LOG_LAST_ERROR_IF(GetLastError() != STATUS_INVALID_PARAMETER);
-                        }
-                        else
-                        {
-                            m_token = true;
-                            m_isVTEnabled = true;
-                            break;
-                        }
+                        // Even if it is a different error, log it and try to carry on.
+                        LOG_LAST_ERROR_IF(GetLastError() != STATUS_INVALID_PARAMETER);
+                    }
+                    else
+                    {
+                        m_token = true;
+                        break;
                     }
                 }
             }
@@ -69,6 +65,21 @@ namespace AppInstaller::CLI::VirtualTerminal
         {
             LOG_LAST_ERROR_IF(!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), m_previousMode));
             m_token = false;
+        }
+    }
+
+    const ConsoleModeRestore& ConsoleModeRestore::Instance()
+    {
+        static ConsoleModeRestore s_instance;
+        return s_instance;
+    }
+
+    void ConstructedSequence::Append(const Sequence& sequence)
+    {
+        if (sequence.Get())
+        {
+            m_str += sequence.Get();
+            Set(m_str);
         }
     }
 
@@ -138,6 +149,13 @@ namespace AppInstaller::CLI::VirtualTerminal
         {
 
         }
+
+        ConstructedSequence Hyperlink(const std::string& text, const std::string& ref)
+        {
+            std::ostringstream result;
+            result << AICLI_VT_OSC "8;;" << ref << AICLI_VT_ESCAPE << "\\" << text << AICLI_VT_OSC << "8;;" << AICLI_VT_ESCAPE << "\\";
+            return ConstructedSequence{ result.str() };
+        }
     }
 
     namespace TextModification
@@ -145,5 +163,64 @@ namespace AppInstaller::CLI::VirtualTerminal
         const Sequence EraseLineForward{ AICLI_VT_CSI "0K" };
         const Sequence EraseLineBackward{ AICLI_VT_CSI "1K" };
         const Sequence EraseLineEntirely{ AICLI_VT_CSI "2K" };
+    }
+
+    namespace Progress
+    {
+        ConstructedSequence Construct(State state, std::optional<uint32_t> percentage)
+        {
+            // See https://conemu.github.io/en/AnsiEscapeCodes.html#ConEmu_specific_OSC
+
+            THROW_HR_IF(E_BOUNDS, percentage.has_value() && percentage > 100u);
+
+            // Workaround some quirks in the Windows Terminal implementation of the progress OSC sequence
+            switch (state)
+            {
+            case State::None:
+            case State::Indeterminate:
+                // Windows Terminal does not recognize the OSC sequence if the progress value is left out.
+                // As a workaround, we can specify an arbitrary value since it does not matter for None and Indeterminate states.
+                percentage = percentage.value_or(0);
+                break;
+            case State::Normal:
+            case State::Error:
+            case State::Paused:
+                // Windows Terminal does not support switching progress states without also setting a progress value at the same time,
+                // so we disallow this case for now.
+                THROW_HR_IF(E_INVALIDARG, !percentage.has_value());
+                break;
+            }
+
+            int stateId;
+            switch (state)
+            {
+            case State::None:
+                stateId = 0;
+                break;
+            case State::Indeterminate:
+                stateId = 3;
+                break;
+            case State::Normal:
+                stateId = 1;
+                break;
+            case State::Error:
+                stateId = 2;
+                break;
+            case State::Paused:
+                stateId = 4;
+                break;
+            default:
+                THROW_HR(E_UNEXPECTED);
+            }
+
+            std::ostringstream result;
+            result << AICLI_VT_OSC "9;4;" << stateId << ";";
+            if (percentage.has_value())
+            {
+                result << percentage.value();
+            }
+            result << AICLI_VT_ESCAPE << "\\";
+            return ConstructedSequence{ result.str() };
+        }
     }
 }

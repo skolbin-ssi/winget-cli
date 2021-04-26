@@ -98,7 +98,7 @@ namespace AppInstaller::Utility {
 
         char resultBuffer[65];
 
-        for (int i = 0; i < 32; i++)
+        for (size_t i = 0; i < 32; i++)
         {
             sprintf_s(resultBuffer + i * 2, 3, "%02x", hashBuffer[i]);
         }
@@ -120,7 +120,7 @@ namespace AppInstaller::Utility {
 
         resultBuffer.resize(32);
 
-        for (int i = 0; i < 32; i++)
+        for (size_t i = 0; i < 32; i++)
         {
             sscanf_s(hashCStr + 2 * i, "%02hhx", &resultBuffer[i]);
         }
@@ -128,7 +128,7 @@ namespace AppInstaller::Utility {
         return resultBuffer;
     }
 
-    std::vector<uint8_t> SHA256::ComputeHash(std::uint8_t* buffer, std::uint32_t cbBuffer)
+    std::vector<uint8_t> SHA256::ComputeHash(const std::uint8_t* buffer, std::uint32_t cbBuffer)
     {
         SHA256 hasher;
         hasher.Add(buffer, cbBuffer);

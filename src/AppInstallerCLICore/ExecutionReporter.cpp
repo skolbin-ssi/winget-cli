@@ -6,6 +6,7 @@
 
 namespace AppInstaller::CLI::Execution
 {
+    using namespace Settings;
     using namespace VirtualTerminal;
 
     const Sequence& HelpCommandEmphasis = TextFormat::Foreground::BrightWhite;
@@ -17,60 +18,31 @@ namespace AppInstaller::CLI::Execution
     Reporter::Reporter(std::ostream& outStream, std::istream& inStream) :
         m_out(outStream),
         m_in(inStream),
-        m_consoleMode(),
-        m_progressBar(outStream, m_consoleMode.IsVTEnabled()),
-        m_spinner(outStream, m_consoleMode.IsVTEnabled())
-    {}
-
-    Reporter::OutputStream::OutputStream(std::ostream& out, bool enableVT) :
-        m_out(out), m_isVTEnabled(enableVT) {}
-
-    void Reporter::OutputStream::AddFormat(const Sequence& sequence)
+        m_progressBar(std::in_place, outStream, IsVTEnabled()),
+        m_spinner(std::in_place, outStream, IsVTEnabled())
     {
-        m_format.append(sequence.Get());
-    }
-
-    void Reporter::OutputStream::ApplyFormat()
-    {
-        // Only apply format if m_applyFormatAtOne == 1 coming into this function.
-        if (m_isVTEnabled && m_applyFormatAtOne)
-        {
-            if (!--m_applyFormatAtOne)
-            {
-                m_out << m_format;
-            }
-        }
-    }
-
-    Reporter::OutputStream& Reporter::OutputStream::operator<<(std::ostream& (__cdecl* f)(std::ostream&))
-    {
-        f(m_out);
-        return *this;
-    }
-
-    Reporter::OutputStream& Reporter::OutputStream::operator<<(const Sequence& sequence)
-    {
-        m_out << sequence;
-        // An incoming sequence will be valid for 1 "standard" output after this one.
-        // We set this to 2 to make that happen, because when it is 1, we will output
-        // the format for the current OutputStream.
-        m_applyFormatAtOne = 2;
-        return *this;
+        SetProgressSink(this);
     }
 
     Reporter::~Reporter()
     {
         // The goal of this is to return output to its previous state.
         // For now, we assume this means "default".
-        if (m_consoleMode.IsVTEnabled())
+        GetBasicOutputStream() << TextFormat::Default;
+    }
+
+    Reporter::Reporter(const Reporter& other, clone_t) :
+        Reporter(other.m_out, other.m_in)
+    {
+        if (other.m_style.has_value())
         {
-            m_out << TextFormat::Default;
+            SetStyle(*other.m_style);
         }
     }
 
-    Reporter::OutputStream Reporter::GetOutputStream(Level level)
+    OutputStream Reporter::GetOutputStream(Level level)
     {
-        OutputStream result(m_out, m_consoleMode.IsVTEnabled());
+        OutputStream result = GetBasicOutputStream();
 
         switch (level)
         {
@@ -93,45 +65,79 @@ namespace AppInstaller::CLI::Execution
         return result;
     }
 
-    void Reporter::SetStyle(VisualStyle style)
+    OutputStream Reporter::GetBasicOutputStream()
     {
-        m_spinner.SetStyle(style);
-        m_progressBar.SetStyle(style);
-        if (style == VisualStyle::NoVT)
+        return { m_out, m_channel == Channel::Output, IsVTEnabled() };
+    }
+
+    void Reporter::SetChannel(Channel channel)
+    {
+        m_channel = channel;
+
+        if (m_channel != Channel::Output)
         {
-            m_consoleMode.DisableVT();
+            // Disable progress for non-output channels
+            m_spinner.reset();
+            m_progressBar.reset();
         }
     }
 
-    bool Reporter::PromptForBoolResponse(const std::string& msg, Level level)
+    void Reporter::SetStyle(VisualStyle style)
     {
-        UNREFERENCED_PARAMETER(level);
-
-        m_out << msg << " (Y|N)" << std::endl;
-
-        char response;
-        m_in.get(response);
-
-        return tolower(response) == 'y';
+        m_style = style;
+        if (m_spinner)
+        {
+            m_spinner->SetStyle(style);
+        }
+        if (m_progressBar)
+        {
+            m_progressBar->SetStyle(style);
+        }
+        if (style == VisualStyle::NoVT)
+        {
+            m_isVTEnabled = false;
+        }
     }
 
     void Reporter::ShowIndefiniteProgress(bool running)
     {
-        if (running)
+        if (m_spinner)
         {
-            m_spinner.ShowSpinner();
-        }
-        else
-        {
-            m_spinner.StopSpinner();
+            if (running)
+            {
+                m_spinner->ShowSpinner();
+            }
+            else
+            {
+                m_spinner->StopSpinner();
+            }
         }
     }
 
     void Reporter::OnProgress(uint64_t current, uint64_t maximum, ProgressType type)
     {
         ShowIndefiniteProgress(false);
-        m_progressBar.ShowProgress(current, maximum, type);
+        if (m_progressBar)
+        {
+            m_progressBar->ShowProgress(current, maximum, type);
+        }
     }
+    
+    void Reporter::BeginProgress()
+    {
+        GetBasicOutputStream() << VirtualTerminal::Cursor::Visibility::DisableShow;
+        ShowIndefiniteProgress(true);
+    };
+
+    void Reporter::EndProgress(bool hideProgressWhenDone)
+    {
+        ShowIndefiniteProgress(false);
+        if (m_progressBar)
+        {
+            m_progressBar->EndProgress(hideProgressWhenDone);
+        }
+        GetBasicOutputStream() << VirtualTerminal::Cursor::Visibility::EnableShow;
+    };
 
     void Reporter::SetProgressCallback(ProgressCallback* callback)
     {
@@ -149,5 +155,10 @@ namespace AppInstaller::CLI::Execution
         {
             callback->Cancel();
         }
+    }
+
+    bool Reporter::IsVTEnabled() const
+    {
+        return m_isVTEnabled && ConsoleModeRestore::Instance().IsVTEnabled();
     }
 }

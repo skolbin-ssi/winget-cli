@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "ShowCommand.h"
 #include "Workflows/ShowFlow.h"
+#include "Workflows/CompletionFlow.h"
 #include "Workflows/WorkflowBase.h"
 #include "Resources.h"
 
@@ -12,7 +13,8 @@ namespace AppInstaller::CLI
     {
         return {
             Argument::ForType(Execution::Args::Type::Query),
-            Argument::ForType(Execution::Args::Type::Manifest),
+            // The manifest argument from Argument::ForType can be blocked by Group Policy but we don't want that here
+            Argument{ "manifest", 'm', Execution::Args::Type::Manifest, Resource::String::ManifestArgumentDescription, ArgumentType::Standard, Argument::Visibility::Help },
             Argument::ForType(Execution::Args::Type::Id),
             Argument::ForType(Execution::Args::Type::Name),
             Argument::ForType(Execution::Args::Type::Moniker),
@@ -32,6 +34,12 @@ namespace AppInstaller::CLI
     Resource::LocString ShowCommand::LongDescription() const
     {
         return { Resource::String::ShowCommandLongDescription };
+    }
+
+    void ShowCommand::Complete(Execution::Context& context, Execution::Args::Type valueType) const
+    {
+        context <<
+            Workflow::CompleteWithSingleSemanticsForValue(valueType);
     }
 
     std::string ShowCommand::HelpLink() const
@@ -54,9 +62,9 @@ namespace AppInstaller::CLI
             {
                 context <<
                     Workflow::OpenSource <<
-                    Workflow::SearchSource <<
-                    Workflow::EnsureOneMatchFromSearchResult <<
-                    Workflow::ReportSearchResultIdentity <<
+                    Workflow::SearchSourceForSingle <<
+                    Workflow::EnsureOneMatchFromSearchResult(false) <<
+                    Workflow::ReportPackageIdentity <<
                     Workflow::ShowAppVersions;
             }
         }
@@ -64,6 +72,7 @@ namespace AppInstaller::CLI
         {
             context <<
                 Workflow::GetManifest <<
+                Workflow::ReportManifestIdentity <<
                 Workflow::SelectInstaller <<
                 Workflow::ShowManifestInfo;
         }
